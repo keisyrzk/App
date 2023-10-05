@@ -118,8 +118,6 @@ function ReimbursementAccountPage({
     const requestorStepRef = useRef(null);
 
 
-
-//class ReimbursementAccountPage extends React.Component {
     constructor(props) {
         super(props);
         this.continue = this.continue.bind(this);
@@ -139,64 +137,62 @@ function ReimbursementAccountPage({
 
     useEffect(() => {
         fetchData();
-        // We want this effect to run only once after the component mounts, so we provide an empty dependency array.
     }, []);
 
-    function componentDidUpdate(prevProps) {
-        if (prevProps.network.isOffline && !network.isOffline && prevProps.reimbursementAccount.pendingAction !== CONST.RED_BRICK_ROAD_PENDING_ACTION.DELETE) {
-            fetchData();
-        }
-        if (!hasACHDataBeenLoaded) {
-            // If the ACHData has not been loaded yet, and we are seeing the default data for props.reimbursementAccount
-            // We don't need to do anything yet
-            if (reimbursementAccount !== ReimbursementAccountProps.reimbursementAccountDefaultProps && !reimbursementAccount.isLoading) {
-                // If we are here, it is because this is the first time we load the ACHData from the server and
-                // this.props.reimbursementAccount.isLoading just changed to false. From now on, it makes sense to run the code
-                // below updating states and the route, and this will happen in the next react lifecycle.
-                setShouldShowContinueSetupButton(getShouldShowContinueSetupButtonInitialValue());
-                setHasACHDataBeenLoaded(true);
-            }
-            return;
-        }
+    // Custom hook to get the previous value
+    function usePrevious(value) {
+      const ref = useRef();
+      useEffect(() => {
+        ref.current = value;
+     });
+     return ref.current;
+    }
 
-        if (
-            prevProps.reimbursementAccount.pendingAction === CONST.RED_BRICK_ROAD_PENDING_ACTION.DELETE &&
-            reimbursementAccount.pendingAction !== prevProps.reimbursementAccount.pendingAction
-        ) {
-            // We are here after the user tried to delete the bank account. We will want to set
-            // setShouldShowContinueSetupButton to `false` if the bank account was deleted.
-            setShouldShowContinueSetupButton(hasInProgressVBBA());
-        }
+    // Use the custom hook to get the previous reimbursementAccount value
+    const prevReimbursementAccount = usePrevious(reimbursementAccount);
 
+    // This useEffect handles fetching data if the network is back online and there's no DELETE pending action
+    useEffect(() => {
+        if (network.isOffline) return; // Exit if the network is still offline
+        if (reimbursementAccount.pendingAction === CONST.RED_BRICK_ROAD_PENDING_ACTION.DELETE) return; // Exit if there's a DELETE pending action
+        fetchData();
+    }, [network.isOffline, reimbursementAccount.pendingAction]);
+
+    // This useEffect deals with the ACHData loading state and updates related state variables accordingly
+    useEffect(() => {
+        if (hasACHDataBeenLoaded) return; // Exit if ACHData has been loaded
+        if (reimbursementAccount === ReimbursementAccountProps.reimbursementAccountDefaultProps) return; // Exit if using default props
+        if (reimbursementAccount.isLoading) return; // Exit if reimbursementAccount is still loading
+    
+        // Set local state based on initial value and set ACH data as loaded
+        setShouldShowContinueSetupButton(getShouldShowContinueSetupButtonInitialValue());
+        setHasACHDataBeenLoaded(true);
+    }, [hasACHDataBeenLoaded, reimbursementAccount]);
+
+    // This useEffect handles the change in pending action for reimbursementAccount to update the setup button state
+    useEffect(() => {
+        if (reimbursementAccount.pendingAction === prevReimbursementAccount.pendingAction) return; // Exit if pending action hasn't changed
+        setShouldShowContinueSetupButton(hasInProgressVBBA());
+    }, [reimbursementAccount.pendingAction]);
+
+    // This useEffect takes care of route navigation and error handling based on various conditions
+    useEffect(() => {
         const currentStep = lodashGet(reimbursementAccount, 'achData.currentStep') || CONST.BANK_ACCOUNT.STEP.BANK_ACCOUNT;
-
-        if (shouldShowContinueSetupButton) {
-            // If we are showing the "Continue with setup" / "Start over" buttons:
-            // - We don't want to update the route in case the user reloads the page. If we update the route and the user reloads, we will
-            //   take the user to the step set in the route and skip chosing the options.
-            // - We don't want to clear possible errors because we want to allow the user to clear them clicking the X
-            return;
-        }
+        if (shouldShowContinueSetupButton) return; // Exit if we are showing the "Continue with setup" button
 
         const currentStepRouteParam = getStepToOpenFromRouteParams();
-        if (currentStepRouteParam === currentStep) {
-            // The route is showing the correct step, no need to update the route param or clear errors.
-            return;
-        }
+        if (currentStepRouteParam === currentStep) return; // Exit if the route is showing the correct step
         if (currentStepRouteParam !== '') {
-            // When we click "Connect bank account", we load the page without the current step param, if there
-            // was an error when we tried to disconnect or start over, we want the user to be able to see the error,
-            // so we don't clear it. We only want to clear the errors if we are moving between steps.
+            // Clear errors if moving between steps
             BankAccounts.hideBankAccountErrors();
         }
 
-        // When the step changes we will navigate to update the route params. This is mostly cosmetic as we only use
-        // the route params when the component first mounts to jump to a specific route instead of picking up where the
-        // user left off in the flow.
+        // Navigate based on the current step
         const backTo = lodashGet(route.params, 'backTo');
         const policyId = lodashGet(route.params, 'policyID');
         Navigation.navigate(ROUTES.BANK_ACCOUNT_WITH_STEP_TO_OPEN.getRoute(getRouteForCurrentStep(currentStep), policyId, backTo));
-    }
+    }, [shouldShowContinueSetupButton, reimbursementAccount, route.params]);
+
 
     /*
      * Calculates the state used to show the "Continue with setup" view. If a bank account setup is already in progress and
