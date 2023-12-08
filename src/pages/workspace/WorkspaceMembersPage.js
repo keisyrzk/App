@@ -83,10 +83,10 @@ function WorkspaceMembersPage(props) {
     const prevIsOffline = usePrevious(props.network.isOffline);
     const accountIDs = useMemo(() => _.map(_.keys(props.policyMembers), (accountID) => Number(accountID)), [props.policyMembers]);
     const prevAccountIDs = usePrevious(accountIDs);
-    const textInputRef = useRef(null);
     const isOfflineAndNoMemberDataAvailable = _.isEmpty(props.policyMembers) && props.network.isOffline;
     const prevPersonalDetails = usePrevious(props.personalDetails);
-
+    const textInputRef = useRef(null);
+    const [hasTransitionEnded, setHasTransitionEnded] = useState(false);
     const isFocusedScreen = useIsFocused();
 
     useEffect(() => {
@@ -97,6 +97,19 @@ function WorkspaceMembersPage(props) {
     }, [isFocusedScreen]);
 
     useEffect(() => () => (SearchInputManager.searchInput = ''), []);
+
+    const onTransitionEnded = () => {
+        setHasTransitionEnded(true);
+        textInputRef.current.focus();
+    }
+
+    // On component mount and update
+    useEffect(() => {
+        // If the component is rendered without a transition, focus immediately
+        if (!hasTransitionEnded) {
+            textInputRef.current.focus();
+        }
+    }, [hasTransitionEnded]);
 
     /**
      * Get filtered personalDetails list with current policyMembers
@@ -422,6 +435,7 @@ function WorkspaceMembersPage(props) {
             includeSafeAreaPaddingBottom={false}
             style={[styles.defaultModalContainer]}
             testID={WorkspaceMembersPage.displayName}
+            onEntryTransitionEnd={onTransitionEnded}
         >
             <FullPageNotFoundView
                 shouldShow={(_.isEmpty(props.policy) && !props.isLoadingReportData) || !PolicyUtils.isPolicyAdmin(props.policy) || PolicyUtils.isPendingDeletePolicy(props.policy)}
